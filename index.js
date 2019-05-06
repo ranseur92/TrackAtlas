@@ -28,6 +28,12 @@ function createResource({resource, region, island, description}) {
     stmt.finalize();
 }
 
+function updateResource({id, resource, region, island, description}) {
+    var stmt = db.prepare("UPDATE resources SET resource = ?, region = ?, island = ?, description = ? where id = ?");
+    stmt.run(resource, region, island, description, id);
+    stmt.finalize();
+}
+
 createTable();
 
 var bot = new Discord.Client({
@@ -35,34 +41,40 @@ var bot = new Discord.Client({
    autorun: true
 });
 
-/*
-    db.each("SELECT * FROM resources", function(err, row) {
-        console.log(row);
-    });
-*/
-
 const COMMANDS = {
     addResource: {
         params: ['resource', 'region', 'island', 'description'],
-        action: function(arguments) {
-            createResource(arguments);
-            this.post(`Added Resource \`\`\`${JSON.stringify(arguments, null, 4)}\`\`\``);
+        action: function(query) {
+            const id = createResource(query);
+            this.post(`Added Resource #${id} \`\`\`${JSON.stringify(query, null, 4)}\`\`\``);
+        }
+    },
+    editResource: {
+        params: ['id', 'resource', 'region', 'island', 'description'],
+        action: function(query) {
+            updateResource(query);
+            this.post(`Updated Resource #${query.id} \`\`\`${JSON.stringify(query, null, 4)}\`\`\``);
+        }
+    },
+    whereIs: {
+        params: ['resource'],
+        action: function(query) {
+            db.all(`SELECT * FROM resources where resource like '%${query.resource}%'`, (err, results) => {
+                this.postResults(results);
+            });
+        }
+    },
+    removeResource: {
+        params: ['id'],
+        action: function(query) {
+            db.all(`DELETE FROM resources where id = ?`, [query.id], (err, results) => {
+                console.log(err, results)
+            });
         }
     },
     listResources: function() {
         db.all(`SELECT * FROM resources`, (err, results) => {
-            if (results.length > 0) {
-                const table = new Table();
-                for(result of results) {
-                    for (key of Object.keys(result)) {
-                        table.cell(key, result[key])
-                    }
-                    table.newRow()
-                }
-                this.post(table.toString())
-            } else {
-                this.post(`No resources found.`)
-            }
+            this.postResults(results);
         });
     }
 }
@@ -81,22 +93,42 @@ function printHelp() {
     this.post(message);
 }
 
-function handleMessage(message, channelId) {
+class Context {
 
-    const context = {
-        post: (message) => {
-            if (channelId) {
-                bot.sendMessage({ to: channelId, message });
-            } else {
-                console.log('[MSG]:', message);
-            }
+    constructor(channelId) {
+        this.channelId = channelId;
+    }
+
+    post(message) {
+        if (this.channelId) {
+            bot.sendMessage({ to: this.channelId, message });
+        } else {
+            console.log('[MSG]:', message);
         }
     }
 
+    postResults(results) {
+        if (results.length > 0) {
+            const table = new Table();
+            for(let result of results) {
+                for (let key of Object.keys(result)) {
+                    table.cell(key, result[key])
+                }
+                table.newRow()
+            }
+            this.post(`\`\`\`${table.toString()}\`\`\``)
+        } else {
+            this.post(`No resources found.`)
+        }
+    }
+}
+
+function handleMessage(message, channelId) {
     if (message.indexOf('!') === 0) {
         const parsed = parse(message)._;
         const _command = parsed[0].substring(1);
         const _args = parsed.splice(1);
+        const context = new Context(channelId);
 
         if (_command.indexOf('help') === 0) {
             printHelp.bind(context)();
@@ -122,36 +154,4 @@ function handleMessage(message, channelId) {
 
 bot.on('message', function (user, userID, channelId, message, evt) {
     handleMessage(message, channelId);
-/*
-    if (message.substring(0, 1) == '!') {
-        var args = message.substring(1).split(' ');
-        var cmd = args[0];
-       
-        args = args.splice(1);
-        switch(cmd) {
-            case 'whereis':
-                if (args.length <= 0) {
-                    return sendMessage('You must pass a resource name. !whereis <resource>')
-                }
-
-                db.all(`SELECT * FROM resources where resource like '%${args[0]}%'`, function(err, results) {
-                    if (results.length > 0) {
-                        const table = new Table();
-                        for(result of results) {
-                            for (key of Object.keys(result)) {
-                                table.cell(key, result[key])
-                            }
-                            table.newRow()
-                        }
-                        sendMessage(table.toString())
-                    } else {
-                        sendMessage(`No resources found matching '${args[0]}'`)
-                    }
-                });
-                break;
-            case 'whois':
-                break;
-         }
-     }
-     */
 });
