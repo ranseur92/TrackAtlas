@@ -3,7 +3,7 @@ const auth = require('./auth.json');
 const Table = require('easy-table');
 const sqlite3 = require('sqlite3').verbose();
 const parse = require('minimist-string');
-const db = new sqlite3.Database('./db/tracker');
+const db = new sqlite3.Database('./tracker');
 
 function createTable() {
     db.serialize(function() {
